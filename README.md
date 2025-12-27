@@ -50,8 +50,84 @@ graph TD
 - **Deployment Ready**: Docker-compatible services
 
 ---
+## 🚀 Quick Start (Docker – Recommended)
 
-## 🚀 Setup & Run Instructions
+This project is fully containerized using Docker Compose.
+All required services (Django ASGI + Redis + Celery) start automatically.
+
+### 📦 Prerequisites
+
+- Docker v24+
+
+- Docker Compose v2+
+
+### ▶️ Start the Application
+```bash
+docker compose up --build
+```
+
+This will start:
+
+- Django + Daphne (API & WebSockets) → http://127.0.0.1:8000
+
+- Swagger API Docs → http://127.0.0.1:8000/swagger/
+
+- Redis (broker + pub/sub)
+
+- Celery Worker (background jobs)
+
+### ⏹ Stop Services
+```bash
+docker compose down
+```
+### 🔁 Rebuild Containers (after code changes)
+```bash
+docker compose up --build
+```
+### 🧪 Verify Everything Is Working
+✅ 1. Swagger API
+
+Open:
+```bash
+http://127.0.0.1:8000/swagger/
+```
+✅ 2. Authentication
+```bash
+POST /api/auth/login/
+```
+✅ 3. WebSocket Test
+```bash
+const socket = new WebSocket(
+  `ws://127.0.0.1:8000/ws/workspaces/1/?token=<JWT_ACCESS_TOKEN>`
+);
+```
+✅ 4. Celery Test Endpoint
+```bash
+POST /api/jobs/test-celery/
+Authorization: Bearer <JWT_ACCESS_TOKEN>
+```
+
+Expected:
+```bash
+{
+  "status": "task queued",
+  "job_id": "uuid"
+}
+```
+### 🧪 Running Tests
+
+Tests can be executed inside or outside Docker.
+
+Local
+```bash
+pytest
+```
+Docker (optional)
+```bash
+docker compose exec web pytest
+```
+
+## 🚀 Setup & Run Instructions(Manual)
 
 ### 1️⃣ Prerequisites
 
@@ -292,30 +368,27 @@ ws://127.0.0.1:8000/ws/workspaces/<workspace_id>/?token=<JWT_ACCESS_TOKEN>
 
 Open Chrome DevTools → Console and run:
 ```bash
-const token = "YOUR_JWT_ACCESS_TOKEN";
+const token = "<JWT_ACCESS_TOKEN>";
 
 const socket = new WebSocket(
   `ws://127.0.0.1:8000/ws/workspaces/1/?token=${token}`
 );
 
 socket.onopen = () => {
-    console.log("✅ CONNECTED");
+  console.log("✅ WebSocket Connected");
 
-    socket.send(JSON.stringify({
-        event: "file_change",
-        payload: {
-            file: "test.js",
-            content: "console.log('hello world')"
-        }
-    }));
+  socket.send(JSON.stringify({
+    event: "ping",
+    payload: { msg: "hello from browser" }
+  }));
 };
 
 socket.onmessage = (e) => {
-    console.log("📩 MESSAGE RECEIVED:", JSON.parse(e.data));
+  console.log("📩 Message:", JSON.parse(e.data));
 };
 
 socket.onerror = (e) => {
-    console.error("❌ ERROR:", e);
+  console.error("❌ WebSocket error", e);
 };
 ```
 Expected Output
@@ -327,43 +400,154 @@ Expected Output
   user: "user@example.com"
 }
 ```
+
 ## ⚙️ Asynchronous Job Processing (Celery)
-Job Submission API
+
+The system supports asynchronous background job execution using Celery with Redis as both the broker and result backend. This allows long-running or compute-heavy tasks to be processed outside the request–response lifecycle.
+
+### 🧩 Architecture Overview
+
+- API Layer: Accepts job requests via REST
+
+- Message Broker: Redis queues tasks
+
+- Worker Layer: Celery workers execute tasks asynchronously
+
+- Resilience: Automatic retries for transient failures
+
+### 🔁 Job Submission API
 ```bash
 POST /api/jobs/submit/
 Authorization: Bearer <JWT_ACCESS_TOKEN>
 ```
 
-Request Body:
+Request Body
 ```bash
 {
   "code": "print('Hello World')",
   "language": "python"
 }
 ```
-Background Processing Flow
 
-- API accepts job request
+#### Behavior
 
-- Job is queued to Celery
+- The request returns immediately
 
-- Worker processes task asynchronously
+- Job is pushed to Redis
 
-- Retry logic handles transient failures
+- Celery worker processes the task asynchronously
 
-- Job result is logged / persisted
+- Results are logged and can be persisted if required
 
-Retry Logic
+### 🧪 Celery Health & Test Endpoint
+
+A dedicated endpoint is provided to validate Celery + Redis connectivity in all environments (local, Docker, CI).
+```bash
+POST /api/jobs/test-celery/
+Authorization: Bearer <JWT_ACCESS_TOKEN>
+```
+
+Request Body
+```bash
+{}
+```
+
+#### Purpose
+
+- Confirms Redis broker availability
+
+- Confirms Celery worker is running
+
+- Confirms async task execution pipeline
+
+- Useful for smoke tests and deployments
+
+Expected Response
+```bash
+{
+  "status": "task queued",
+  "job_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+}
+```
+### 🔄 Background Processing Flow
+
+- Client sends request to API
+
+- API enqueues task to Redis
+
+- Celery worker consumes task
+
+- Task executes asynchronously
+
+- Result is logged / persisted
+
+- Client is not blocked at any stage
+
+### 🔁 Retry & Failure Handling
+
+Celery tasks implement automatic retry logic to handle transient failures.
 ```bash
 @shared_task(bind=True, max_retries=3)
 ```
 
-- Retries up to 3 times
+#### Retry Strategy
 
-- Delay between retries
+- Up to 3 retries
 
-- Idempotent job execution
+- Configurable delay between retries
 
+- Prevents cascading failures
+
+- Safe for idempotent execution
+
+### 🧪 How to Test (Docker / Local)
+1️⃣ Ensure Services Are Running
+```bash
+docker compose up --build
+```
+2️⃣ Verify Celery Worker Logs
+```bash
+docker logs collab_backend-celery-1
+```
+3️⃣ Trigger Test Task
+```bash
+POST http://127.0.0.1:8000/api/jobs/test-celery/
+Authorization: Bearer <JWT_ACCESS_TOKEN>
+```
+4️⃣ Observe Worker Execution
+
+Celery logs will show:
+
+- Task received
+
+- Task executed
+
+- Retry behavior (if simulated failure occurs)
+- 
+### 🎯 Why This Design?
+| Decision                | Reason                             |
+| ----------------------- | ---------------------------------- |
+| Celery                  | Industry-standard async processing |
+| Redis                   | Fast, reliable broker + pub/sub    |
+| Async tasks             | Prevent API blocking               |
+| Retries                 | Fault tolerance                    |
+| Dedicated test endpoint | Deployment safety & observability  |
+
+### 📈 Scalability Considerations
+
+- Multiple Celery workers can be added horizontally
+
+- Redis supports high-throughput task queues
+
+- Tasks are stateless and idempotent
+
+- No tight coupling between API and worker layers
+
+### Test Execution
+
+```bash
+pytest
+```
 ## 🧪 Testing Summary
 
 | Feature         | How to Test                  |
@@ -511,3 +695,15 @@ celery -A collab_backend worker --loglevel=info
 
 This backend demonstrates a production-grade architecture with real-time communication, async processing, and secure APIs.
 All major features were tested locally using Daphne, Redis, Celery workers, Swagger, Postman, and browser-based WebSocket clients.
+
+## ✅ Submission Checklist
+
+- [x] REST APIs with Swagger documentation
+- [x] JWT authentication & authorization
+- [x] WebSocket real-time collaboration
+- [x] Redis pub/sub integration
+- [x] Celery background processing with retries
+- [x] Dockerized local & production setup
+- [x] Unit & integration tests
+- [x] Scalable architecture design
+
