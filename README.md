@@ -142,12 +142,140 @@ Use the access token for all authenticated APIs.
 
 - Protected using JWT & role-based permissions
 
-### API Documentation
+## 📘 API Documentation
+
+This project uses **Swagger UI (drf-yasg)** to provide interactive, self-documenting REST APIs.
+
+Swagger allows you to:
+- Explore all available endpoints
+- Authenticate using JWT Bearer tokens
+- Execute API requests directly from the browser
+- Validate request/response schemas
 
 Swagger UI:
+Once the server is running, open:
 ```bash
 
 http://127.0.0.1:8000/swagger/
+```
+
+---
+
+## 🔐 Authentication in Swagger (JWT Bearer)
+
+### Step 1: Generate JWT Token
+
+Use the **Login API**:
+
+**Endpoint**
+```bash
+
+POST /api/auth/login/
+```
+
+**Request Body**
+```json
+{
+  "email": "user@example.com",
+  "password": "password"
+}
+```
+Response
+```json
+{
+  "access": "<JWT_ACCESS_TOKEN>",
+  "refresh": "<JWT_REFRESH_TOKEN>"
+}
+```
+Step 2: Authorize in Swagger UI
+
+-Click the Authorize 🔓 button (top-right)
+
+-In the Bearer field, enter:
+```json
+Bearer <JWT_ACCESS_TOKEN>
+```
+-Click Authorize
+
+-Close the popup
+
+All protected APIs are now authenticated.
+
+## 📁 Project & Workspace APIs (Swagger)
+- Create Project
+
+- Swagger Path
+```bash
+POST /api/projects/projects/
+```
+
+- Request Body
+```bash
+{
+  "name": "My Project",
+  "description": "Demo project"
+}
+```
+
+- Expected Response
+```bash
+{
+  "id": 1,
+  "name": "My Project",
+  "description": "Demo project",
+  "created_at": "2025-12-26T17:23:38Z",
+  "owner": 2
+}
+```
+#### List Projects
+
+Swagger Path
+```bash
+GET /api/projects/projects/
+
+```
+Returns all projects owned or accessible by the authenticated user.
+
+#### Update Project
+
+Swagger Path
+```bash
+PUT /api/projects/projects/{project_id}/
+
+```
+Modify project name or description.
+
+#### Delete Project
+
+Swagger Path
+```bash
+DELETE /api/projects/projects/{project_id}/
+```
+
+Deletes a project (Owner only).
+
+### ⚙️ Job APIs (Swagger + Celery)
+#### Submit Background Job
+
+Swagger Path
+```bash
+POST /api/jobs/submit/
+```
+
+Request Body
+```bash
+{
+  "code": "print('Hello World')",
+  "language": "python"
+}
+```
+
+Response
+```
+{
+  "message": "Job queued",
+  "job_id": "job_123"
+}
 ```
 ### 🔴 Real-Time Collaboration (WebSockets)
 WebSocket Endpoint
@@ -246,6 +374,79 @@ Retry Logic
 | Background Jobs | Postman + Celery logs        |
 | Retries         | Simulated task failures      |
 | Rate Limiting   | Exceed request thresholds    |
+
+
+## 🚀 Deployment Instructions
+
+This project is designed to be cloud-ready and horizontally scalable.
+
+### 🔧 Local Development Deployment
+
+#### Required Services:
+
+- Django (ASGI)
+
+- Redis
+
+- Celery Worker
+
+#### Run Order:
+
+- Start Redis
+
+- Start Django via Daphne
+
+- Start Celery worker
+```bash
+docker run -d -p 6379:6379 redis
+daphne -b 0.0.0.0 -p 8000 collab_backend.asgi:application
+celery -A collab_backend worker --loglevel=info
+
+```
+### ☁️ Production Deployment (Recommended)
+
+#### Suggested Stack:
+
+- ASGI Server: Daphne / Uvicorn
+
+- Reverse Proxy: Nginx
+
+- Database: PostgreSQL
+
+- Cache & Broker: Redis
+
+- Workers: Multiple Celery workers
+
+#### Production Notes:
+
+- Replace SQLite with PostgreSQL
+
+- Store secrets using environment variables
+
+- Enable HTTPS (WSS for WebSockets)
+
+- Use process manager (systemd / supervisor)
+
+- Scale Daphne & Celery independently
+
+### 🐳 Docker Deployment (Optional)
+
+#### Services can be containerized using:
+
+- Django + Daphne container
+
+- Redis container
+
+- Celery worker container
+
+#### This enables:
+
+- Horizontal scaling
+
+- CI/CD integration
+
+- Cloud deployment (AWS / GCP / Azure)
+
 
 ## ⚖️ Design Decisions & Trade-offs
 ### Django + Channels
