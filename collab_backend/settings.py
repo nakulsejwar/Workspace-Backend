@@ -13,21 +13,27 @@ SECRET_KEY = 'django-insecure-ltx$@bkqy46vl87$k(zi&k7-j(4*cb45+aph-4hk!o2b@%+^1a
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
+# Enable DEBUG=True ONLY for local development if needed
 DEBUG = False
+
+# Uncomment ONLY for local debugging
+# DEBUG = True
 
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
-    ".railway.app",
+    "0.0.0.0",
+    ".railway.app",   
 ]
 
 CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
     "https://*.railway.app",
 ]
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-
-
+USE_X_FORWARDED_HOST = True
 
 # Application definition
 
